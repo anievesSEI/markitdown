@@ -166,3 +166,7 @@ cython_debug/
 src/.DS_Store
 .DS_Store
 .cursorrules
+
+# UV Lock
+
+packages/markitdown-mcp/uv.lock
