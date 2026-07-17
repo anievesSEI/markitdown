@@ -10,7 +10,10 @@
 
 The `markitdown-mcp` package provides a lightweight STDIO, Streamable HTTP, and SSE MCP server for calling MarkItDown.
 
-It exposes one tool: `convert_to_markdown(uri)`, where uri can be any `http:`, `https:`, `file:`, or `data:` URI.
+It exposes two tools, both of which accept a `uri` that can be any `http:`, `https:`, `file:`, or `data:` URI:
+
+- `convert_to_markdown(uri)` — converts the resource to Markdown, preserving document structure (headings, lists, tables, links, emphasis). Use this when the structure matters.
+- `convert_to_text(uri)` — the same extraction, but with Markdown formatting stripped away to leave only the readable plain text. This typically produces fewer tokens than the Markdown output, so it is useful when you only need the textual content and want to save tokens.
 
 ## Installation
 
@@ -126,12 +129,12 @@ If using SSE:
 Finally:
 * click the `Tools` tab,
 * click `List Tools`,
-* click `convert_to_markdown`, and
+* click `convert_to_markdown` (or `convert_to_text`), and
 * run the tool on any valid URI.
 
 ## Security Considerations
 
-The server does not support authentication, and runs with the privileges of the user running it. For this reason, when running in SSE or Streamable HTTP mode, the server binds by default to `localhost`. Even still, it is important to recognize that the server can be accessed by any process or users on the same local machine, and that the `convert_to_markdown` tool can be used to read any file that the server's user has access to, or any data from the network. If you require additional security, consider running the server in a sandboxed environment, such as a virtual machine or container, and ensure that the user permissions are properly configured to limit access to sensitive files and network segments. Above all, DO NOT bind the server to other interfaces (non-localhost) unless you understand the security implications of doing so.
+The server does not support authentication, and runs with the privileges of the user running it. For this reason, when running in SSE or Streamable HTTP mode, the server binds by default to `localhost`. Even still, it is important to recognize that the server can be accessed by any process or users on the same local machine, and that the `convert_to_markdown` and `convert_to_text` tools can be used to read any file that the server's user has access to, or any data from the network. If you require additional security, consider running the server in a sandboxed environment, such as a virtual machine or container, and ensure that the user permissions are properly configured to limit access to sensitive files and network segments. Above all, DO NOT bind the server to other interfaces (non-localhost) unless you understand the security implications of doing so.
 
 ## Trademarks
 
