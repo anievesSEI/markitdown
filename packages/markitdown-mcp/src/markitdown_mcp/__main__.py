@@ -1,4 +1,5 @@
 import contextlib
+import re
 import sys
 import os
 from collections.abc import AsyncIterator
@@ -19,8 +20,82 @@ mcp = FastMCP("markitdown")
 
 @mcp.tool()
 async def convert_to_markdown(uri: str) -> str:
-    """Convert a resource described by an http:, https:, file: or data: URI to markdown"""
+    """Convert a resource described by an http:, https:, file: or data: URI to markdown.
+
+    Preserves document structure (headings, lists, tables, links, emphasis) as
+    Markdown. Use this when the structure matters to the task.
+    """
     return MarkItDown(enable_plugins=check_plugins_enabled()).convert_uri(uri).markdown
+
+
+@mcp.tool()
+async def convert_to_text(uri: str) -> str:
+    """Convert a resource described by an http:, https:, file: or data: URI to plain text.
+
+    Same extraction as `convert_to_markdown`, but Markdown formatting (heading
+    markers, emphasis, link/image syntax, table pipes, code fences, list bullets,
+    etc.) is stripped away, leaving only the readable text. This typically produces
+    fewer tokens than the Markdown output. Use this when you only need the textual
+    content and not the document's structure.
+    """
+    markdown = MarkItDown(enable_plugins=check_plugins_enabled()).convert_uri(uri).markdown
+    return _markdown_to_text(markdown)
+
+
+def _markdown_to_text(markdown: str) -> str:
+    """Best-effort strip of Markdown formatting to leave readable plain text.
+
+    This is intentionally lightweight and dependency-free: it removes the most
+    common Markdown syntax so the result is cheaper (in tokens) to pass to a model
+    while keeping the underlying text intact.
+    """
+    text = markdown
+
+    # Remove fenced code blocks' fences, keeping the code contents.
+    text = re.sub(r"^[ \t]*```[^\n]*\n?", "", text, flags=re.MULTILINE)
+    text = re.sub(r"^[ \t]*~~~[^\n]*\n?", "", text, flags=re.MULTILINE)
+
+    # Images: ![alt](url) -> alt
+    text = re.sub(r"!\[([^\]]*)\]\([^)]*\)", r"\1", text)
+    # Links: [text](url) -> text
+    text = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", text)
+    # Reference-style links: [text][ref] -> text
+    text = re.sub(r"\[([^\]]*)\]\[[^\]]*\]", r"\1", text)
+
+    lines = []
+    for line in text.split("\n"):
+        # Horizontal rules -> drop
+        if re.match(r"^[ \t]*([-*_])(?:[ \t]*\1){2,}[ \t]*$", line):
+            continue
+        # Heading markers: "## Title" -> "Title"
+        line = re.sub(r"^[ \t]*#{1,6}[ \t]+", "", line)
+        # Blockquote markers: "> quote" -> "quote"
+        line = re.sub(r"^[ \t]*>[ \t]?", "", line)
+        # List bullets and numbers: "- item" / "1. item" -> "item"
+        line = re.sub(r"^[ \t]*([-*+]|\d+[.)])[ \t]+", "", line)
+        # Table rows: drop separator rows, turn "| a | b |" into "a  b"
+        stripped = line.strip()
+        if stripped.startswith("|"):
+            if re.match(r"^\|[\s:\-|]+\|?$", stripped):
+                continue
+            cells = [c.strip() for c in stripped.strip("|").split("|")]
+            line = "  ".join(cells)
+        lines.append(line)
+    text = "\n".join(lines)
+
+    # Inline emphasis and code markers.
+    text = re.sub(r"(\*\*|__)(.*?)\1", r"\2", text)  # bold
+    text = re.sub(r"(\*|_)(.*?)\1", r"\2", text)  # italic
+    text = re.sub(r"~~(.*?)~~", r"\1", text)  # strikethrough
+    text = re.sub(r"`+([^`]*)`+", r"\1", text)  # inline code
+
+    # Escaped Markdown punctuation: "\*" -> "*"
+    text = re.sub(r"\\([\\`*_{}\[\]()#+\-.!>~|])", r"\1", text)
+
+    # Collapse runs of 3+ newlines into a paragraph break.
+    text = re.sub(r"\n{3,}", "\n\n", text)
+
+    return text.strip()
 
 
 def check_plugins_enabled() -> bool:
